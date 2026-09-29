@@ -31,6 +31,7 @@ function harness() {
     append(...items) { this.children.push(...items); }
     replaceChildren(...items) { this.children = items; }
     showModal() { this.open = true; } close() { this.open = false; }
+    scrollIntoView() {}
     focus() {} select() { this.selected = true; }
   }
   class Connection extends EventEmitter {
@@ -99,7 +100,7 @@ function harness() {
       setTimeout: (f, d) => timer(f, d), clearTimeout: id => timers.delete(id), setInterval: (f, d) => timer(f, d, true)
     };
     vm.runInNewContext(source, context);
-    const result = { elements, win, doc, navigator, clipboard,
+    const result = { elements, win, doc, navigator, clipboard, context,
       click: id => elements[id].fire('click'),
       edit: text => { elements.message.value = text; elements.message.fire('input'); },
       text: () => elements.message.value,
@@ -232,4 +233,37 @@ test('approval pending stays alive without repeated requests; signaling reconnec
   host.peer().open = false; host.peer().disconnected = true; host.peer().emit('disconnected'); h.tick(2000);
   a.edit('after signaling recovery'); h.tick(500); assert.equal(host.text(), 'after signaling recovery');
   assert.equal(host.elements['overall-status'].textContent, '1 台と接続中');
+});
+
+
+test('room code is visible at creation, during approval, after reconnect; QR failure is isolated', () => {
+  const h = harness(), host = h.host();
+  const code = host.elements['room-code'].textContent;
+  assert.match(code, /^[A-HJ-NP-Z2-9]{10}$/);
+  assert.equal(host.elements['room-panel'].hidden, false);
+  const guest = h.join(host, false);
+  assert.equal(host.elements['requests-card'].open, true);
+  assert.equal(host.elements['room-code'].textContent, code);
+  host.elements.requests.children[0].children[2].children[1].onclick(); h.tick(500);
+  assert.equal(host.elements['requests-card'].open, false);
+  assert.equal(host.elements['room-code'].textContent, code);
+  host.click('leave-btn');
+  assert.equal(host.elements['room-panel'].hidden, true);
+  host.win.qrcode = undefined;
+  host.context.qrcode = undefined;
+  host.click('host-btn'); h.tick();
+  assert.equal(host.elements['room-panel'].hidden, false);
+  assert.match(host.elements['room-code'].textContent, /^[A-HJ-NP-Z2-9]{10}$/);
+  assert.match(host.elements['qr-code'].textContent, /QRコードを表示できません/);
+});
+
+test('HTML asset URLs change whenever app or CSS contents change', () => {
+  const path = require('node:path');
+  const { createHash } = require('node:crypto');
+  const root = path.join(__dirname, '..');
+  const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+  for (const file of ['app.js', 'styles.css']) {
+    const hash = createHash('sha256').update(fs.readFileSync(path.join(root, file))).digest('hex').slice(0, 12);
+    assert.ok(html.includes(`${file}?v=${hash}`), `${file} cache version must match contents`);
+  }
 });

@@ -243,14 +243,18 @@
 
   function startHost() {
     if (role) return;
-    if (!window.Peer || !window.qrcode || !window.isSecureContext) {
+    if (!window.isSecureContext) {
       showToast("HTTPS対応のブラウザで開いてください。"); return;
+    }
+    if (!window.Peer) {
+      showToast("接続機能を読み込めませんでした。ページを再読み込みしてください。"); return;
     }
     saveName();
     roomCode = shortCode();
-    setupMode("host");
     ui["room-code"].textContent = roomCode;
     renderQr();
+    setupMode("host");
+    ui["room-panel"].scrollIntoView({ block: "nearest" });
     createPeer();
   }
 
