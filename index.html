@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#111827">
+  <meta name="referrer" content="no-referrer">
+  <title>Clip Sync — ブラウザでテキストを共有</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div class="brand"><span class="brand-mark" aria-hidden="true">↗</span><div><strong>Clip Sync</strong><small>ブラウザだけで、テキストをつなぐ</small></div></div>
+      <span id="overall-status" class="status-pill" role="status">未接続</span>
+    </header>
+
+    <main>
+      <section class="intro">
+        <p class="eyebrow">PRIVATE TEXT SHARING</p>
+        <h1>コピーした言葉を、<br><span>もう一台へ。</span></h1>
+        <p>Windows、iPhone、Android。アプリのインストールなしで、ブラウザ同士をつなぎます。</p>
+      </section>
+
+      <div class="layout">
+        <div class="main-column">
+          <section class="card compose" aria-labelledby="compose-title">
+            <div class="section-heading"><div><p class="eyebrow">SHARE</p><h2 id="compose-title">送受信テキスト</h2></div><span id="text-count" class="muted">0 文字</span></div>
+            <label class="sr-only" for="message">共有するテキスト</label>
+            <textarea id="message" placeholder="ここに入力するか、「貼り付け」でクリップボードから読み込みます。" spellcheck="false"></textarea>
+            <div class="actions">
+              <button id="paste-btn" class="button button-soft" type="button">貼り付け</button>
+              <button id="send-btn" class="button button-primary" type="button">送信 <span aria-hidden="true">↗</span></button>
+              <button id="copy-btn" class="button button-soft" type="button">コピー</button>
+            </div>
+            <p class="hint">クリップボードの読み書きにはボタン操作が必要です。読み取れない場合は、入力欄を長押しして貼り付けてください。</p>
+          </section>
+
+          <section class="card" aria-labelledby="history-title">
+            <div class="section-heading"><div><p class="eyebrow">ACTIVITY</p><h2 id="history-title">履歴</h2></div><button id="clear-history" class="text-button" type="button">消去</button></div>
+            <ul id="history" class="history-list"><li class="empty-state">送受信したテキストがここに表示されます。</li></ul>
+            <p class="hint">履歴はこのタブを開いている間だけ保持します。</p>
+          </section>
+        </div>
+
+        <div class="side-column">
+          <section class="card" aria-labelledby="connect-title">
+            <div class="section-heading"><div><p class="eyebrow">CONNECTION</p><h2 id="connect-title">端末を接続</h2></div></div>
+            <label class="field-label" for="device-name">この端末の名前</label>
+            <input id="device-name" maxlength="32" autocomplete="off" placeholder="例: YのiPhone">
+            <div id="setup-panel">
+              <button id="host-btn" class="button button-primary full" type="button">接続コードを作る</button>
+              <div class="divider"><span>または</span></div>
+              <label class="field-label" for="join-code">別の端末の接続コード</label>
+              <div class="join-row"><input id="join-code" maxlength="16" inputmode="text" autocapitalize="characters" autocomplete="off" placeholder="10文字のコード"><button id="join-btn" class="button button-soft" type="button">参加</button></div>
+              <p class="hint">QRコードをスマートフォンのカメラで読むと、コードを入力できます。</p>
+            </div>
+            <div id="room-panel" hidden>
+              <p class="field-label">この部屋の接続コード</p>
+              <div class="code-box"><strong id="room-code"></strong><button id="copy-code-btn" class="text-button" type="button">コピー</button></div>
+              <div id="qr-code" class="qr-code" aria-label="参加用QRコード"></div>
+              <p class="hint">ほかの端末でQRコードを読むか、接続コードを入力してください。</p>
+            </div>
+            <div id="guest-panel" hidden><p id="guest-message" class="info-box">接続しています…</p></div>
+            <button id="leave-btn" class="button button-outline full leave" type="button" hidden>接続を終了</button>
+          </section>
+
+          <section id="requests-card" class="card" aria-labelledby="requests-title" hidden>
+            <div class="section-heading"><div><p class="eyebrow">APPROVAL</p><h2 id="requests-title">接続リクエスト</h2></div></div>
+            <ul id="requests" class="device-list"></ul>
+          </section>
+
+          <section class="card" aria-labelledby="devices-title">
+            <div class="section-heading"><div><p class="eyebrow">DEVICES</p><h2 id="devices-title">接続端末</h2></div><span id="device-count" class="count-badge">0</span></div>
+            <ul id="devices" class="device-list"><li class="empty-state">まだ接続していません。</li></ul>
+          </section>
+        </div>
+      </div>
+    </main>
+    <footer>Clip Sync <span>·</span> テキストはブラウザ間で送信され、GitHubには保存されません。</footer>
+  </div>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  <script src="assets/vendor/peerjs.min.js"></script>
+  <script src="assets/vendor/qrcode.js"></script>
+  <script src="app.js" defer></script>
+</body>
+</html>
