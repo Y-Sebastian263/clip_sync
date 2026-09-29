@@ -64,10 +64,7 @@
             <button id="leave-btn" class="button button-outline full leave" type="button" hidden>接続を終了</button>
           </section>
 
-          <section id="requests-card" class="card" aria-labelledby="requests-title" hidden>
-            <div class="section-heading"><div><p class="eyebrow">APPROVAL</p><h2 id="requests-title">接続リクエスト</h2></div></div>
-            <ul id="requests" class="device-list"></ul>
-          </section>
+
 
           <section class="card" aria-labelledby="devices-title">
             <div class="section-heading"><div><p class="eyebrow">DEVICES</p><h2 id="devices-title">接続端末</h2></div><span id="device-count" class="count-badge">0</span></div>
@@ -78,6 +75,11 @@
     </main>
     <footer>Clip Sync <span>·</span> テキストはブラウザ間で送信され、GitHubには保存されません。</footer>
   </div>
+  <dialog id="requests-card" class="approval-dialog" aria-labelledby="requests-title" aria-describedby="requests-description">
+    <div class="section-heading"><div><p class="eyebrow">APPROVAL</p><h2 id="requests-title">接続を承認しますか？</h2></div></div>
+    <p id="requests-description" class="hint">以下の端末から接続リクエストが届きました。テキストを共有してよい相手か確認してください。</p>
+    <ul id="requests" class="device-list"></ul>
+  </dialog>
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
   <script src="assets/vendor/peerjs.min.js"></script>
   <script src="assets/vendor/qrcode.js"></script>

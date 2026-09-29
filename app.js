@@ -372,7 +372,7 @@
 
   function renderRequests() {
     ui.requests.replaceChildren();
-    ui["requests-card"].hidden = pending.size === 0;
+
     for (const [id, item] of pending) {
       const li = document.createElement("li");
       li.className = "device-row";
@@ -382,8 +382,12 @@
       const actions = document.createElement("span"); actions.className = "request-actions";
       const accept = document.createElement("button"); accept.className = "button button-primary"; accept.textContent = "承認"; accept.onclick = () => acceptRequest(id);
       const reject = document.createElement("button"); reject.className = "button button-outline"; reject.textContent = "拒否"; reject.onclick = () => rejectRequest(id);
+      reject.autofocus = true;
       actions.append(accept, reject); li.append(avatar, info, actions); ui.requests.append(li);
     }
+    const dialog = ui["requests-card"];
+    if (pending.size && !dialog.open) dialog.showModal();
+    else if (!pending.size && dialog.open) dialog.close();
   }
 
   function renderDevices() {
@@ -537,6 +541,8 @@
     } catch { ui.message.focus(); showToast("自動で読み取れません。入力欄を長押しして貼り付けてください。"); }
   }
 
+  // Keep the request visible until an explicit approval or rejection.
+  ui["requests-card"].addEventListener("cancel", (event) => event.preventDefault());
   ui["host-btn"].addEventListener("click", startHost);
   ui["join-btn"].addEventListener("click", startGuest);
   ui["join-code"].addEventListener("keydown", (event) => { if (event.key === "Enter") startGuest(); });

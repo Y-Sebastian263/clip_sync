@@ -30,6 +30,7 @@ function harness() {
     fire(e) { for (const cb of this.events[e] || []) cb({}); }
     append(...items) { this.children.push(...items); }
     replaceChildren(...items) { this.children = items; }
+    showModal() { this.open = true; } close() { this.open = false; }
     focus() {} select() { this.selected = true; }
   }
   class Connection extends EventEmitter {
