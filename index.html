@@ -30,15 +30,14 @@
             <textarea id="message" placeholder="ここに入力するか、「貼り付け」でクリップボードから読み込みます。" spellcheck="false"></textarea>
             <div class="actions">
               <button id="paste-btn" class="button button-soft" type="button">貼り付け</button>
-              <button id="send-btn" class="button button-primary" type="button">送信 <span aria-hidden="true">↗</span></button>
               <button id="copy-btn" class="button button-soft" type="button">コピー</button>
             </div>
-            <p class="hint">クリップボードの読み書きにはボタン操作が必要です。読み取れない場合は、入力欄を長押しして貼り付けてください。</p>
+            <p class="hint">入力内容は0.5秒ごとに自動同期します。クリップボードの読み書きにはボタン操作が必要です。読み取れない場合は、入力欄を長押しして貼り付けてください。</p>
           </section>
 
           <section class="card" aria-labelledby="history-title">
             <div class="section-heading"><div><p class="eyebrow">ACTIVITY</p><h2 id="history-title">履歴</h2></div><button id="clear-history" class="text-button" type="button">消去</button></div>
-            <ul id="history" class="history-list"><li class="empty-state">送受信したテキストがここに表示されます。</li></ul>
+            <ul id="history" class="history-list"><li class="empty-state">コピーに成功したテキストがここに表示されます。</li></ul>
             <p class="hint">履歴はこのタブを開いている間だけ保持します。</p>
           </section>
         </div>
