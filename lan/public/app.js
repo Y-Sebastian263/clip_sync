@@ -12,6 +12,7 @@
   let debounce = null;
   let pollTimer = null;
   let adminTimer = null;
+  let heartbeatTimer = null;
   let events = null;
 
   const setStatus = (text, connected = false) => {
@@ -104,6 +105,12 @@
       item.append(head,body);root.append(item);
     }
   }
+  function startHeartbeat() {
+    clearInterval(heartbeatTimer);
+    const ping=()=>{if(document.visibilityState!=='hidden')api('/api/ping','POST',{}).catch(()=>{});};
+    ping();
+    heartbeatTimer=setInterval(ping,15000);
+  }
   function openEvents() {
     events?.close();
     events=new EventSource('/api/events');
@@ -115,7 +122,7 @@
       try {
         const info=await api('/api/info');
         if(!info.authorized){
-          events?.close();events=null;state=null;dirty=false;conflict=false;
+          events?.close();events=null;clearInterval(heartbeatTimer);state=null;dirty=false;conflict=false;
           $('draft').value='';$('clips').replaceChildren();setCount();
           $('workspace').classList.add('hidden');$('join-panel').classList.remove('hidden');
           $('request-btn').disabled=false;setStatus('認証が無効になりました');
@@ -124,10 +131,27 @@
       } catch { /* Server unreachable: EventSource retries on return. */ }
     };
   }
+  function updateDiscoveryInfo(info) {
+    const active=Boolean(info.discoveryUrl && info.mdnsActive);
+    const field=$('discovery-url');
+    field.textContent=info.discoveryUrl || 'ホスト名を使えません（証明書を確認）';
+    $('copy-discovery-btn').disabled=!info.discoveryUrl;
+    const badge=$('discovery-status');
+    badge.textContent=active?'LAN内へ通知中':info.discoveryUrl?'探索サービスを利用できません':'証明書がホスト名に未対応';
+    badge.classList.toggle('active',active);
+  }
   async function loadAdmin() {
     if(!isHost)return;
     try {
-      const admin=await api('/api/admin');
+      const [admin,info]=await Promise.all([api('/api/admin'),api('/api/info')]);
+      updateDiscoveryInfo(info);
+      const online=admin.devices.filter(d=>d.online);
+      $('online-count').textContent=`${online.length}台 / 登録${admin.devices.length}台（ホストを除く）`;
+      const activeList=$('online-devices');activeList.replaceChildren();
+      if(!online.length){const el=document.createElement('p');el.className='empty';el.textContent='現在接続中の端末はありません。';activeList.append(el);}
+      for(const device of online){const chip=document.createElement('span');chip.className='online-device';
+        const dot=document.createElement('span');dot.className='online-dot';dot.setAttribute('aria-hidden','true');
+        const label=document.createElement('span');label.textContent=device.name;chip.append(dot,label);activeList.append(chip);}
       const requests=$('requests');requests.replaceChildren();
       if(!admin.pending.length){const el=document.createElement('p');el.className='empty';el.textContent='承認待ちはありません。';requests.append(el);}
       for(const req of admin.pending) {
@@ -145,7 +169,11 @@
       for(const device of admin.devices) {
         const row=document.createElement('div');row.className='device-row';
         const label=document.createElement('div');const strong=document.createElement('strong');strong.textContent=device.name;
-        const small=document.createElement('small');small.textContent='登録 '+new Date(device.createdAt).toLocaleDateString('ja-JP');label.append(strong,small);
+        const small=document.createElement('small');
+        const lastSeen=device.lastSeenAt?new Date(device.lastSeenAt).toLocaleString('ja-JP'):'まだ接続なし';
+        small.textContent=`${device.online?'● 接続中':'○ オフライン'} / 最終確認 ${lastSeen}`;
+        small.className=device.online?'device-online':'device-offline';
+        label.append(strong,small);
         row.append(label,createButton('登録解除',async()=>{if(!confirm(`${device.name} の認証を取り消しますか？`))return;try{await api('/api/admin/revoke','POST',{id:device.id});await loadAdmin();}catch(e){feedback(e.message,true);}},'danger'));
         registered.append(row);
       }
@@ -183,10 +211,10 @@
     $('join-wait').classList.add('hidden');
     if(info.authorized)$('pair-code').classList.add('hidden');
     $('workspace').classList.toggle('hidden',!info.authorized);
-    if(isHost){await loadAdmin();adminTimer=setInterval(loadAdmin,2500);}
+    if(isHost){updateDiscoveryInfo(info);await loadAdmin();adminTimer=setInterval(loadAdmin,2500);}
     if(info.authorized){
       applyState(await api('/api/state'));
-      setStatus('LAN接続中',true);openEvents();
+      setStatus('LAN接続中',true);openEvents();startHeartbeat();
     } else {setStatus('ホストの承認が必要');}
   }
   $('draft').addEventListener('input',handleDraftInput);
@@ -202,7 +230,9 @@
   $('reload-btn').addEventListener('click',()=>{if(!state)return;dirty=false;showConflict(false);$('draft').value=state.text;editingVersion=state.textVersion;setCount();feedback('他端末の内容を表示しました');});
   $('overwrite-btn').addEventListener('click',()=>{if(!confirm('他端末の新しい内容を自分の文章で上書きしますか？'))return;syncDraft(true);});
   $('copy-url-btn').addEventListener('click',()=>copyText($('host-url').textContent));
+  $('copy-discovery-btn').addEventListener('click',()=>copyText($('discovery-url').textContent));
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&state)api('/api/ping','POST',{}).catch(()=>{});});
   beginJoin();
   boot().catch(e=>{setStatus('サーバー接続エラー');feedback(e.message,true,'join-message');$('join-panel').classList.remove('hidden');});
-  window.addEventListener('beforeunload',()=>{events?.close();clearTimeout(pollTimer);clearInterval(adminTimer);});
+  window.addEventListener('beforeunload',()=>{events?.close();clearTimeout(pollTimer);clearInterval(adminTimer);clearInterval(heartbeatTimer);});
 })();
