@@ -1,0 +1,12 @@
+{
+  "name": "clipsync-lan",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Private LAN-only multi-device clipboard board with local host approval",
+  "license": "UNLICENSED",
+  "scripts": {
+    "start": "node server.cjs",
+    "test": "node --test tests/*.test.cjs"
+  },
+  "engines": {"node": ">=20"}
+}
