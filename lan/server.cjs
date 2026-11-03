@@ -6,6 +6,7 @@ const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const net = require('node:net');
+const {getDiscoveryHost,startMdns} = require('./mdns.cjs');
 
 const SESSION_COOKIE = '__Host-clipsync_session';
 const MAX_TEXT = 16 * 1024;
@@ -96,10 +97,12 @@ function loadDevices(file) {
   if (data.schema !== 1 || !Array.isArray(data.devices)) throw Error('端末データの形式が不正です');
   return data.devices.filter(d => d && typeof d.id === 'string' && /^[a-f0-9]{64}$/.test(d.tokenHash) && typeof d.name === 'string' && Number.isSafeInteger(d.createdAt));
 }
-function makeApp({hostIp, netmask, storagePath = path.join(__dirname,'data','devices.json'), staticDir = path.join(__dirname,'public'), clock = now}) {
+function makeApp({hostIp, netmask, storagePath = path.join(__dirname,'data','devices.json'), staticDir = path.join(__dirname,'public'), clock = now, discoveryHost = null, discoveryStatus = () => false}) {
   const devices = loadDevices(storagePath);
   const pending = new Map();
   const streams = new Map();
+  const lastSeen = new Map(); // ephemeral presence; never persisted, no MAC or hardware IDs
+  const ONLINE_TTL_MS = 45 * 1000;
   const requestTimes = new Map();
   const writeTimes = new Map();
   const pageStart = clock();
@@ -114,7 +117,9 @@ function makeApp({hostIp, netmask, storagePath = path.join(__dirname,'data','dev
     if (!/^[a-f0-9-]{36}$/.test(id || '') || !/^[A-Za-z0-9_-]{43}$/.test(token || '')) return null;
     const device = devices.find(d=>d.id===id);
     if (!device || device.createdAt+SESSION_TTL_MS <= clock()) return null;
-    return safeEqualHex(device.tokenHash,hash(token)) ? device : null;
+    if (!safeEqualHex(device.tokenHash,hash(token))) return null;
+    lastSeen.set(device.id,clock());
+    return device;
   };
   const checkWriteLimit = (req,res) => {
     const auth=authorized(req);
@@ -158,6 +163,7 @@ function makeApp({hostIp, netmask, storagePath = path.join(__dirname,'data','dev
       const port = req.socket.localPort;
       const host = req.headers.host;
       const accepted = [`${hostIp}:${port}`,`localhost:${port}`,`127.0.0.1:${port}`];
+      if (discoveryHost) accepted.push(`${discoveryHost}:${port}`);
       if (!accepted.includes(host)) { error(res,403,'不正なホスト名です'); return; }
       const origin = `https://${host}`;
       const headers = {
@@ -176,7 +182,7 @@ function makeApp({hostIp, netmask, storagePath = path.join(__dirname,'data','dev
       const url = new URL(req.url,origin);
       const pathname = url.pathname;
       if (pathname==='/api/info' && req.method==='GET') {
-        json(res,200,{authorized:!!authorized(req),host:isOwner,joinEnabled:true,hostUrl:`https://${hostIp}:${port}/`,uptimeSec:Math.floor((clock()-pageStart)/1000)});return;
+        json(res,200,{authorized:!!authorized(req),host:isOwner,joinEnabled:true,hostUrl:`https://${hostIp}:${port}/`,discoveryUrl:discoveryHost?`https://${discoveryHost}:${port}/`:null,mdnsActive:!!discoveryStatus(),uptimeSec:Math.floor((clock()-pageStart)/1000)});return;
       }
       if (pathname==='/api/state' && req.method==='GET') {
         if(!authorized(req)){error(res,401,'端末承認が必要です');return;}
@@ -189,7 +195,12 @@ function makeApp({hostIp, netmask, storagePath = path.join(__dirname,'data','dev
         res.writeHead(200,{'Content-Type':'text/event-stream; charset=utf-8','Cache-Control':'no-store','Connection':'keep-alive','X-Accel-Buffering':'no'});
         res.write(`event: state\ndata: ${JSON.stringify(publicState())}\n\n`);
         streams.set(res,auth.id);
-        req.on('close',()=>streams.delete(res));return;
+        res.on('close',()=>streams.delete(res));return;
+      }
+      if (pathname==='/api/ping' && req.method==='POST') {
+        if(!authorized(req)){error(res,401,'端末承認が必要です');return;}
+        await readBody(req); // Origin + JSON already checked; no untrusted data stored.
+        json(res,200,{ok:true});return;
       }
       if (pathname==='/api/state' && req.method==='POST') {
         if(!checkWriteLimit(req,res))return;
@@ -243,7 +254,7 @@ function makeApp({hostIp, netmask, storagePath = path.join(__dirname,'data','dev
       if (pathname.startsWith('/api/admin')) {
         if(!isOwner){error(res,403,'端末管理はホストPCでのみ操作できます');return;}
         if(pathname==='/api/admin'&&req.method==='GET') {
-          json(res,200,{pending:[...pending.values()].filter(p=>!p.approved&&!p.rejected).map(p=>({id:p.id,name:p.name,pairCode:p.pairCode,createdAt:p.createdAt})),devices:devices.map(d=>({id:d.id,name:d.name,createdAt:d.createdAt}))});return;
+          json(res,200,{pending:[...pending.values()].filter(p=>!p.approved&&!p.rejected).map(p=>({id:p.id,name:p.name,pairCode:p.pairCode,createdAt:p.createdAt})),devices:devices.map(d=>({id:d.id,name:d.name,createdAt:d.createdAt,lastSeenAt:lastSeen.get(d.id)||null,online:!!lastSeen.get(d.id)&&(clock()-lastSeen.get(d.id)<ONLINE_TTL_MS)}))});return;
         }
         if(pathname==='/api/admin/approve'&&req.method==='POST') {
           const body=await readBody(req),item=pending.get(body.id);
@@ -262,7 +273,7 @@ function makeApp({hostIp, netmask, storagePath = path.join(__dirname,'data','dev
         if(pathname==='/api/admin/revoke'&&req.method==='POST') {
           const body=await readBody(req),i=devices.findIndex(d=>d.id===body.id);
           if(i<0){error(res,404,'端末が見つかりません');return;}
-          const revoked=devices.splice(i,1)[0]; persist();
+          const revoked=devices.splice(i,1)[0]; lastSeen.delete(revoked.id);persist();
           for(const [stream,id] of streams)if(id===revoked.id){streams.delete(stream);stream.end();}
           broadcast();json(res,200,{status:'revoked'});return;
         }
@@ -297,7 +308,12 @@ async function start() {
   const port=Number(process.env.CLIPSYNC_PORT||4477);
   if(!Number.isInteger(port)||port<1024||port>65535)throw Error('ポートは1024〜65535で指定してください');
   const tls={cert:fs.readFileSync(cert),key:fs.readFileSync(key),minVersion:'TLSv1.2'};
-  const app=makeApp({hostIp,netmask:lan.netmask});
+  const discoveryHost=getDiscoveryHost(path.join(__dirname,'data'));
+  const certX509=new crypto.X509Certificate(tls.cert);
+  const canAdvertise=!!certX509.checkHost(discoveryHost);
+  if(!canAdvertise)console.warn('[ClipSync] HTTPS certificate lacks a valid .local SAN. mDNS discovery disabled; IP access still works.');
+  let discovery=null;
+  const app=makeApp({hostIp,netmask:lan.netmask,discoveryHost:canAdvertise?discoveryHost:null,discoveryStatus:()=>!!discovery?.active});
   // Separate listening sockets let us give admin privileges ONLY to local machine requests.
   const lanServer=https.createServer(tls,app.handler);
   const ownerServer=https.createServer(tls,app.handler);
@@ -308,10 +324,12 @@ async function start() {
   const listen=(server,ip)=>new Promise((resolve,reject)=>{server.once('error',reject);server.listen(port,ip,()=>{server.off('error',reject);resolve();});});
   await listen(lanServer,hostIp);
   try {await listen(ownerServer,'127.0.0.1');}catch(err){lanServer.close();throw err;}
+  if (canAdvertise) discovery=startMdns({hostIp,netmask:lan.netmask,hostName:discoveryHost,port});
   console.log(`ClipSync LAN started. Host admin: https://localhost:${port}/`);
   console.log(`Other devices on this LAN: https://${hostIp}:${port}/`);
+  if(canAdvertise)console.log(`mDNS discoverable host (where supported): https://${discoveryHost}:${port}/`);
   console.log('Only devices in the local subnet may connect; no external signaling or cloud storage.');
-  const stop=()=>{app.shutdown();lanServer.close();ownerServer.close();};
+  const stop=()=>{discovery?.close();app.shutdown();lanServer.close();ownerServer.close();};
   process.on('SIGINT',()=>{stop();process.exit(0);});
   process.on('SIGTERM',()=>{stop();process.exit(0);});
 }
