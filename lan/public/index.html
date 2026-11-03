@@ -42,8 +42,16 @@
     <section id="admin-panel" class="panel admin-panel hidden" aria-label="ホスト管理">
       <div class="section-title"><div><div class="panel-eyebrow">HOST CONTROL</div><h2>ホストPCの端末管理</h2></div><span class="admin-tag">このPCからのみ操作可能</span></div>
       <p class="muted small">新しい端末はここで一度だけ承認します。承認済み端末は次回以降、保存された認証情報で自動接続します。</p>
+      <div class="discovery-panel" aria-label="LAN内のホスト発見">
+        <div class="discovery-heading"><strong>ホストの自動発見（mDNS / DNS-SD）</strong><span id="discovery-status" class="discovery-status">確認中</span></div>
+        <p class="muted small">対応するOSのネットワーク探索でこのホストを発見できます。Webブラウザだけで周囲のホストを自動一覧表示する機能ではありません。</p>
+        <div class="host-url"><span id="discovery-url">ホスト名を読み込み中…</span><button type="button" id="copy-discovery-btn" class="button button-secondary">ホスト名URLをコピー</button></div>
+        <p class="muted small">接続できない端末では、下のIPアドレスを使ってください。初回承認後は接続したときと同じURLを使うと、再承認を避けられます。</p>
+      </div>
+      <p class="field-label">IPアドレスで接続（確実な代替手段）</p>
       <div class="host-url"><span id="host-url">共有URLを読み込み中…</span><button type="button" id="copy-url-btn" class="button button-secondary">URLをコピー</button></div>
-      <div class="manage-grid"><div><h3>承認待ち</h3><div id="requests"><p class="empty">承認待ちはありません。</p></div></div><div><h3>登録済み端末</h3><div id="devices"><p class="empty">登録された端末はありません。</p></div></div></div>
+      <div class="presence-panel" aria-label="接続中端末の一覧"><div class="presence-heading"><h3>現在接続中の端末</h3><span id="online-count" class="online-count">0台 / 登録0台</span></div><div id="online-devices" class="presence-devices"><p class="empty">現在接続中の端末はありません。</p></div></div>
+      <div class="manage-grid"><div><h3>承認待ち</h3><div id="requests"><p class="empty">承認待ちはありません。</p></div></div><div><h3>登録済み端末と最終接続</h3><div id="devices"><p class="empty">登録された端末はありません。</p></div></div></div>
     </section>
     <footer><span>ClipSync LAN • LAN専用 • HTTPS通信</span><span>ホストPCを閉じると共有本文と掲示板は消去されます。端末登録のみローカル保存。</span></footer>
   </div>
