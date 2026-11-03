@@ -1,0 +1,55 @@
+name: ClipSync Host Windows (preview)
+
+on:
+  push:
+    branches: [feature/secure-lan-host-v1]
+    paths:
+      - lan/host-go/**
+      - .github/workflows/host-windows.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Set up supported Go toolchain
+        uses: actions/setup-go@v7
+        with:
+          go-version: '1.27.3'
+          cache: false
+      - name: Test native host
+        working-directory: lan/host-go
+        run: go test ./...
+      - name: Build Windows x64 native host
+        shell: pwsh
+        working-directory: lan/host-go
+        run: |
+          $env:GOOS = 'windows'
+          $env:GOARCH = 'amd64'
+          $env:CGO_ENABLED = '0'
+          go build -trimpath '-ldflags=-s -w' -o ClipSyncHost.exe .
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $hash = (Get-FileHash -Path ClipSyncHost.exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  ClipSyncHost.exe" | Set-Content -Encoding ascii SHA256SUMS.txt
+      - name: Assemble preview package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path dist | Out-Null
+          Copy-Item lan/host-go/ClipSyncHost.exe dist/ClipSyncHost.exe
+          Copy-Item lan/host-go/README.md dist/README.md
+          Copy-Item lan/host-go/SHA256SUMS.txt dist/SHA256SUMS.txt
+          Compress-Archive -Path dist/* -DestinationPath ClipSyncHost_Windows_x64.zip -Force
+      - name: Upload preview build artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ClipSyncHost_Windows_x64
+          path: ClipSyncHost_Windows_x64.zip
+          retention-days: 30
+          if-no-files-found: error
