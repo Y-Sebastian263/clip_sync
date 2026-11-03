@@ -22,7 +22,8 @@ test('HTTPS session, approval, board synchronization, revocation and restart',as
   try{
     execFileSync('openssl',['req','-x509','-newkey','rsa:2048','-nodes','-keyout',key,'-out',cert,'-days','1','-subj','/CN=localhost','-addext','subjectAltName=DNS:localhost,IP:127.0.0.1'],{stdio:'ignore'});
   }catch(e){fs.rmSync(tmp,{recursive:true,force:true});throw Error('テストにOpenSSLが必要です: '+e.message);}
-  const app=makeApp({hostIp:'127.0.0.1',netmask:'255.255.255.0',storagePath:store});
+  let fakeTime=Date.now();
+  const app=makeApp({hostIp:'127.0.0.1',netmask:'255.255.255.0',storagePath:store,clock:()=>fakeTime,discoveryHost:'clipsync-a1b2c3d4.local',discoveryStatus:()=>true});
   const server=https.createServer({cert:fs.readFileSync(cert),key:fs.readFileSync(key)},app.handler);
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
   const port=server.address().port;
@@ -41,6 +42,10 @@ test('HTTPS session, approval, board synchronization, revocation and restart',as
   }
   assert.equal((await request('/api/state',{guest:true})).status,401);
   assert.equal((await request('/api/admin',{guest:true})).status,403);
+  const info=await request('/api/info');
+  assert.equal(info.body.discoveryUrl,`https://clipsync-a1b2c3d4.local:${port}/`);
+  assert.equal(info.body.mdnsActive,true);
+  assert.equal((await request('/api/info',{guest:true,hostHeader:`clipsync-a1b2c3d4.local:${port}`})).status,200);
   assert.equal((await request('/api/info',{guest:true,guestIP:'127.0.1.2'})).status,403);
   assert.equal((await request('/api/info',{guest:true,hostHeader:'evil.invalid'})).status,403);
   assert.equal((await request('/api/join',{method:'POST',guest:true,body:{name:'iPad'},origin:false})).status,403);
@@ -65,6 +70,18 @@ test('HTTPS session, approval, board synchronization, revocation and restart',as
   assert.ok(cookie.startsWith(SESSION_COOKIE+'='));
   assert.match(approved.headers['set-cookie'][0],/Secure; HttpOnly; SameSite=Strict/);
   assert.equal((await request('/api/state',{guest:true,cookie})).status,200);
+  let seen=(await request('/api/admin')).body.devices[0];
+  assert.equal(seen.online,true);
+  assert.equal(seen.lastSeenAt,fakeTime);
+  fakeTime+=46000;
+  seen=(await request('/api/admin')).body.devices[0];
+  assert.equal(seen.online,false,'presence must expire even with a registered cookie');
+  assert.equal((await request('/api/ping',{method:'POST',guest:true,cookie,body:{}})).status,200);
+  seen=(await request('/api/admin')).body.devices[0];
+  assert.equal(seen.online,true,'new valid heartbeat restores online status');
+  assert.equal(seen.lastSeenAt,fakeTime);
+  assert.equal((await request('/api/ping',{method:'POST',guest:true,body:{}})).status,401);
+  assert.equal((await request('/api/ping',{method:'POST',guest:true,cookie,body:{},origin:false})).status,403);
   assert.equal((await request('/api/state',{guest:true,cookie,guestIP:'127.0.0.3'})).status,200);
   const updated=await request('/api/state',{method:'POST',guest:true,cookie,body:{text:'ひみつの文章',baseVersion:0}});
   assert.equal(updated.status,200);
@@ -86,6 +103,7 @@ test('HTTPS session, approval, board synchronization, revocation and restart',as
   const restarted=makeApp({hostIp:'127.0.0.1',netmask:'255.255.255.0',storagePath:store});
   assert.equal(restarted.state().text,'');
   assert.equal(restarted.devices.length,1);
+  assert.equal(restarted.devices[0].lastSeenAt,undefined,'presence must not persist to disk');
   restarted.shutdown();
   const deviceId=(await request('/api/admin')).body.devices[0].id;
   assert.equal((await request('/api/admin/revoke',{method:'POST',body:{id:deviceId}})).status,200);
