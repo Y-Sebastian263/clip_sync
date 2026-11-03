@@ -1,0 +1,5 @@
+ClipSyncHost.exe
+ClipSyncHost-linux-test
+*.test
+host-data/
+*.log
